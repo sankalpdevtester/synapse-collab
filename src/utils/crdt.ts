@@ -1,59 +1,63 @@
 import { v4 as uuidv4 } from 'uuid';
 import { WebSocket } from 'ws';
-import { Document } from 'src/utils/documentSync';
+import { DocumentSync } from './documentSync';
 
-interface CRDT {
+interface Operation {
   id: string;
   type: 'insert' | 'delete';
   position: number;
   text: string;
 }
 
-class CRDTImpl {
-  private crdt: CRDT[];
-  private document: Document;
+class CRDT {
+  private operations: Operation[] = [];
+  private document: string = '';
 
-  constructor(document: Document) {
-    this.crdt = [];
-    this.document = document;
+  constructor(private ws: WebSocket, private documentSync: DocumentSync) {
+    this.ws.on('message', (message: string) => {
+      const operation: Operation = JSON.parse(message);
+      this.applyOperation(operation);
+    });
   }
 
-  insert(position: number, text: string) {
-    const crdt: CRDT = {
+  applyOperation(operation: Operation) {
+    switch (operation.type) {
+      case 'insert':
+        this.document = this.document.slice(0, operation.position) + operation.text + this.document.slice(operation.position);
+        break;
+      case 'delete':
+        this.document = this.document.slice(0, operation.position) + this.document.slice(operation.position + operation.text.length);
+        break;
+    }
+    this.operations.push(operation);
+    this.documentSync.updateDocument(this.document);
+  }
+
+  sendOperation(operation: Operation) {
+    this.ws.send(JSON.stringify(operation));
+  }
+
+  insert(text: string, position: number) {
+    const operation: Operation = {
       id: uuidv4(),
       type: 'insert',
       position,
       text,
     };
-    this.crdt.push(crdt);
-    this.applyCRDT(crdt);
+    this.applyOperation(operation);
+    this.sendOperation(operation);
   }
 
-  delete(position: number, length: number) {
-    const crdt: CRDT = {
+  delete(text: string, position: number) {
+    const operation: Operation = {
       id: uuidv4(),
       type: 'delete',
       position,
-      text: '',
+      text,
     };
-    this.crdt.push(crdt);
-    this.applyCRDT(crdt);
-  }
-
-  applyCRDT(crdt: CRDT) {
-    switch (crdt.type) {
-      case 'insert':
-        this.document.insert(crdt.position, crdt.text);
-        break;
-      case 'delete':
-        this.document.delete(crdt.position, crdt.text.length);
-        break;
-    }
-  }
-
-  getCRDTs() {
-    return this.crdt;
+    this.applyOperation(operation);
+    this.sendOperation(operation);
   }
 }
 
-export { CRDTImpl };
+export { CRDT };
