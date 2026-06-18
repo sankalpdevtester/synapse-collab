@@ -1,77 +1,51 @@
 import React, { useState, useEffect } from 'react';
-import { CRDTImpl } from 'src/utils/crdt';
-import { Document } from 'src/utils/documentSync';
+import { CRDT } from '../utils/crdt';
+import { DocumentSync } from '../utils/documentSync';
 import { WebSocket } from 'ws';
 
 interface CollaborativeEditorProps {
-  document: Document;
+  wsUrl: string;
 }
 
-const CollaborativeEditor: React.FC<CollaborativeEditorProps> = ({ document }) => {
-  const [crdt, setCRDT] = useState<CRDTImpl>(new CRDTImpl(document));
-  const [ws, setWS] = useState<WebSocket | null>(null);
+const CollaborativeEditor: React.FC<CollaborativeEditorProps> = ({ wsUrl }) => {
+  const [document, setDocument] = useState('');
+  const [ws, setWs] = useState<WebSocket | null>(null);
+  const [crdt, setCrdt] = useState<CRDT | null>(null);
 
   useEffect(() => {
-    const wsUrl = 'ws://localhost:8080';
-    const wsOptions = {
-      // WebSocket options
-    };
-    const ws = new WebSocket(wsUrl, wsOptions);
-    setWS(ws);
-
-    ws.onmessage = (event) => {
-      const crdt = JSON.parse(event.data);
-      crdt.forEach((crdtItem: CRDT) => {
-        setCRDT((prevCRDT) => {
-          prevCRDT.applyCRDT(crdtItem);
-          return prevCRDT;
-        });
-      });
-    };
-
-    ws.onopen = () => {
-      console.log('Connected to WebSocket server');
-    };
-
-    ws.onclose = () => {
-      console.log('Disconnected from WebSocket server');
-    };
-
-    ws.onerror = (event) => {
-      console.log('Error occurred:', event);
-    };
-
+    const ws = new WebSocket(wsUrl);
+    setWs(ws);
+    const documentSync = new DocumentSync();
+    const crdt = new CRDT(ws, documentSync);
+    setCrdt(crdt);
     return () => {
       ws.close();
     };
-  }, []);
+  }, [wsUrl]);
 
-  const handleInsert = (position: number, text: string) => {
-    crdt.insert(position, text);
-    ws?.send(JSON.stringify(crdt.getCRDTs()));
+  const handleInsert = (text: string, position: number) => {
+    if (crdt) {
+      crdt.insert(text, position);
+    }
   };
 
-  const handleDelete = (position: number, length: number) => {
-    crdt.delete(position, length);
-    ws?.send(JSON.stringify(crdt.getCRDTs()));
+  const handleDelete = (text: string, position: number) => {
+    if (crdt) {
+      crdt.delete(text, position);
+    }
+  };
+
+  const handleDocumentChange = (newDocument: string) => {
+    setDocument(newDocument);
   };
 
   return (
     <div>
-      <textarea
-        value={document.getText()}
-        onChange={(event) => {
-          const text = event.target.value;
-          const position = event.target.selectionStart;
-          const length = event.target.selectionEnd - position;
-          if (length > 0) {
-            handleDelete(position, length);
-          }
-          handleInsert(position, text.substring(position));
-        }}
-      />
+      <textarea value={document} onChange={(e) => handleDocumentChange(e.target.value)} />
+      <button onClick={() => handleInsert('Hello, World!', 0)}>Insert</button>
+      <button onClick={() => handleDelete('Hello, World!', 0)}>Delete</button>
     </div>
   );
 };
 
-export { CollaborativeEditor };
+export default CollaborativeEditor;
