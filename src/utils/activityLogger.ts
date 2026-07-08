@@ -1,9 +1,9 @@
 // src/utils/activityLogger.ts
 import { v4 as uuidv4 } from 'uuid';
 import { WebSocket } from 'ws';
-import { CollaborationUtils } from './collaborationUtils';
-import { CacheManager } from './cacheManager';
-import { Crdt } from './crdt';
+import { collaborationUtils } from './collaborationUtils';
+import { cacheManager } from './cacheManager';
+import { performanceMonitor } from './performanceMonitor';
 
 interface ActivityLog {
   id: string;
@@ -15,17 +15,13 @@ interface ActivityLog {
 
 class ActivityLogger {
   private activityLogs: ActivityLog[] = [];
-  private cacheManager: CacheManager;
-  private collaborationUtils: CollaborationUtils;
-  private crdt: Crdt;
+  private ws: WebSocket;
 
-  constructor(cacheManager: CacheManager, collaborationUtils: CollaborationUtils, crdt: Crdt) {
-    this.cacheManager = cacheManager;
-    this.collaborationUtils = collaborationUtils;
-    this.crdt = crdt;
+  constructor(ws: WebSocket) {
+    this.ws = ws;
   }
 
-  public logActivity(userId: string, action: string, documentId: string): void {
+  logActivity(action: string, userId: string, documentId: string) {
     const activityLog: ActivityLog = {
       id: uuidv4(),
       userId,
@@ -34,55 +30,33 @@ class ActivityLogger {
       documentId,
     };
     this.activityLogs.push(activityLog);
-    this.cacheManager.set(`activityLog:${documentId}`, this.activityLogs);
-    this.collaborationUtils.broadcastActivityLog(activityLog);
+    this.broadcastActivityLog(activityLog);
+    this.cacheActivityLog(activityLog);
+    this.monitorPerformance(activityLog);
   }
 
-  public getActivityLogs(documentId: string): ActivityLog[] {
-    const cachedActivityLogs = this.cacheManager.get(`activityLog:${documentId}`);
-    if (cachedActivityLogs) {
-      return cachedActivityLogs;
-    }
-    return [];
+  broadcastActivityLog(activityLog: ActivityLog) {
+    collaborationUtils.broadcastMessage(this.ws, 'activityLog', activityLog);
   }
 
-  public clearActivityLogs(documentId: string): void {
-    this.cacheManager.delete(`activityLog:${documentId}`);
-    this.activityLogs = this.activityLogs.filter((log) => log.documentId !== documentId);
+  cacheActivityLog(activityLog: ActivityLog) {
+    cacheManager.set(`activityLog:${activityLog.id}`, activityLog);
+  }
+
+  monitorPerformance(activityLog: ActivityLog) {
+    performanceMonitor.logEvent('activityLog', activityLog);
+  }
+
+  getActivityLogs(documentId: string) {
+    return this.activityLogs.filter((log) => log.documentId === documentId);
   }
 }
 
-export const activityLogger = new ActivityLogger(new CacheManager(), new CollaborationUtils(), new Crdt());
-``}
+const activityLogger = new ActivityLogger(new WebSocket('ws://localhost:8080'));
 
-// src/features/collaborativeEditor.tsx (updated to use activityLogger)
-```typescript
-// ...
-import { activityLogger } from '../utils/activityLogger';
+export { activityLogger };
 
-const CollaborativeEditor = () => {
-  // ...
-  const handleEdit = (userId: string, action: string, documentId: string) => {
-    activityLogger.logActivity(userId, action, documentId);
-    // ...
-  };
-  // ...
-};
-
-export default CollaborativeEditor;
-``}
-
-// src/routes/collaboration.ts (updated to use activityLogger)
-```typescript
-// ...
-import { activityLogger } from '../utils/activityLogger';
-
-const collaborationRouter = Router();
-collaborationRouter.get('/activityLogs/:documentId', (req: Request, res: Response) => {
-  const documentId = req.params.documentId;
-  const activityLogs = activityLogger.getActivityLogs(documentId);
-  res.json(activityLogs);
-});
-
-export default collaborationRouter;
-``}
+// Example usage:
+// activityLogger.logActivity('insert', 'user1', 'document1');
+// activityLogger.logActivity('delete', 'user2', 'document1');
+// console.log(activityLogger.getActivityLogs('document1'));
