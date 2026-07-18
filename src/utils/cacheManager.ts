@@ -1,132 +1,72 @@
 // src/utils/cacheManager.ts
 import { v4 as uuidv4 } from 'uuid';
-import { setTimeout, clearTimeout } from 'timers';
-import { CRDT } from 'src/utils/crdt';
+import { CollaboratorPresence } from './collaboratorPresence';
+import { DocumentSync } from './documentSync';
 
 interface CacheItem {
   id: string;
-  document: any;
+  data: any;
   ttl: number;
   expiresAt: number;
 }
 
 class CacheManager {
-  private cache: { [id: string]: CacheItem } = {};
-  private ttl: number = 60 * 1000; // 1 minute
+  private cache: { [key: string]: CacheItem } = {};
+  private intervalId: NodeJS.Timeout;
 
   constructor() {
-    this.init();
+    this.intervalId = setInterval(this.cleanupCache, 60000); // cleanup every 1 minute
   }
 
-  private init() {
-    // Initialize cache with existing documents
-    const documents = CRDT.getDocuments();
-    documents.forEach((document) => {
-      this.cacheDocument(document);
-    });
+  public getCacheItem(key: string): CacheItem | undefined {
+    return this.cache[key];
   }
 
-  public cacheDocument(document: any) {
+  public setCacheItem(key: string, data: any, ttl: number = 300000): void { // default TTL is 5 minutes
     const id = uuidv4();
-    const cacheItem: CacheItem = {
-      id,
-      document,
-      ttl: this.ttl,
-      expiresAt: Date.now() + this.ttl,
-    };
-    this.cache[id] = cacheItem;
-    this.scheduleExpiration(id);
+    const expiresAt = Date.now() + ttl;
+    this.cache[key] = { id, data, ttl, expiresAt };
   }
 
-  public getDocument(id: string) {
-    const cacheItem = this.cache[id];
-    if (cacheItem && cacheItem.expiresAt > Date.now()) {
-      return cacheItem.document;
-    }
-    return null;
+  public deleteCacheItem(key: string): void {
+    delete this.cache[key];
   }
 
-  public updateDocument(id: string, document: any) {
-    const cacheItem = this.cache[id];
-    if (cacheItem) {
-      cacheItem.document = document;
-      cacheItem.expiresAt = Date.now() + this.ttl;
-      this.scheduleExpiration(id);
-    }
-  }
-
-  public deleteDocument(id: string) {
-    const cacheItem = this.cache[id];
-    if (cacheItem) {
-      delete this.cache[id];
-    }
-  }
-
-  private scheduleExpiration(id: string) {
-    const cacheItem = this.cache[id];
-    if (cacheItem) {
-      const timeout = setTimeout(() => {
-        this.deleteDocument(id);
-      }, cacheItem.ttl);
-      cacheItem.timeout = timeout;
-    }
-  }
-
-  public clearCache() {
-    Object.keys(this.cache).forEach((id) => {
-      const cacheItem = this.cache[id];
-      if (cacheItem.timeout) {
-        clearTimeout(cacheItem.timeout);
+  private cleanupCache(): void {
+    const now = Date.now();
+    Object.keys(this.cache).forEach((key) => {
+      const item = this.cache[key];
+      if (item.expiresAt < now) {
+        delete this.cache[key];
       }
-      delete this.cache[id];
     });
+  }
+
+  public getCollaboratorPresenceCache(collaboratorId: string): CollaboratorPresence | undefined {
+    const cacheItem = this.getCacheItem(`collaborator:${collaboratorId}`);
+    if (cacheItem) {
+      return cacheItem.data as CollaboratorPresence;
+    }
+    return undefined;
+  }
+
+  public setCollaboratorPresenceCache(collaboratorId: string, presence: CollaboratorPresence): void {
+    this.setCacheItem(`collaborator:${collaboratorId}`, presence);
+  }
+
+  public getDocumentSyncCache(documentId: string): DocumentSync | undefined {
+    const cacheItem = this.getCacheItem(`document:${documentId}`);
+    if (cacheItem) {
+      return cacheItem.data as DocumentSync;
+    }
+    return undefined;
+  }
+
+  public setDocumentSyncCache(documentId: string, sync: DocumentSync): void {
+    this.setCacheItem(`document:${documentId}`, sync);
   }
 }
 
 const cacheManager = new CacheManager();
 
 export { cacheManager };
-```
-```typescript
-// src/features/collaborativeEditor.tsx
-import React, { useState, useEffect } from 'react';
-import { cacheManager } from 'src/utils/cacheManager';
-
-const CollaborativeEditor = () => {
-  const [document, setDocument] = useState(null);
-
-  useEffect(() => {
-    const id = 'document-123';
-    const cachedDocument = cacheManager.getDocument(id);
-    if (cachedDocument) {
-      setDocument(cachedDocument);
-    } else {
-      // Fetch document from server
-      fetchDocument(id).then((document) => {
-        setDocument(document);
-        cacheManager.cacheDocument(document);
-      });
-    }
-  }, []);
-
-  return (
-    <div>
-      <h1>Collaborative Editor</h1>
-      {document && <Editor document={document} />}
-    </div>
-  );
-};
-
-export default CollaborativeEditor;
-```
-```typescript
-// src/utils/documentSync.ts
-import { cacheManager } from 'src/utils/cacheManager';
-
-const documentSync = {
-  syncDocument: (id: string, document: any) => {
-    cacheManager.updateDocument(id, document);
-  },
-};
-
-export default documentSync;
