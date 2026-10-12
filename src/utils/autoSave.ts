@@ -60,26 +60,3 @@ class AutoSave {
 }
 
 export { AutoSave, AutoSaveOptions };
-```
-```typescript
-// example usage in src/index.tsx
-import React from 'react';
-import { AutoSave, AutoSaveOptions } from './utils/autoSave';
-
-const autoSaveOptions: AutoSaveOptions = {
-  interval: 10000, // 10 seconds
-  versionHistory: true,
-};
-
-const autoSave = new AutoSave(autoSaveOptions);
-
-// stop auto-save when component unmounts
-React.useEffect(() => {
-  return () => {
-    autoSave.stopAutoSave();
-  };
-}, []);
-
-// get saved versions
-const savedVersions = autoSave.getSavedVersions();
-console.log(savedVersions);
