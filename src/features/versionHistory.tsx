@@ -1,4 +1,3 @@
-```typescript
 // src/features/versionHistory.tsx
 import React, { useState, useEffect } from 'react';
 import { useWebSocket } from '../hooks/useWebSocket';
@@ -128,4 +127,3 @@ const App = () => {
 };
 
 ReactDOM.render(<App />, document.getElementById('root'));
-```

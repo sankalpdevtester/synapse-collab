@@ -1,4 +1,3 @@
-```typescript
 import React from 'react';
 import ReactDOM from 'react-dom';
 import App from './App';
@@ -70,4 +69,3 @@ initializeAppState();
 // Start the application
 import { startApplication } from './utils/app';
 startApplication();
-```

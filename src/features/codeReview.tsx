@@ -1,4 +1,3 @@
-```typescript
 import React, { useState, useEffect } from 'react';
 import { WebSocket } from 'ws';
 import { OperationalTransform } from './operationalTransform';
@@ -97,4 +96,3 @@ const CodeReview: React.FC<CodeReviewProps> = ({ code, userId, userName }) => {
 };
 
 export default CodeReview;
-```
